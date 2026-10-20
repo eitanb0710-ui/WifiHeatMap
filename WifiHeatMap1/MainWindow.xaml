@@ -1,0 +1,231 @@
+﻿<Window x:Class="WifiHeatMap1.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WifiHeatMap1"
+        mc:Ignorable="d"
+        Title="WiFi Heat Map"
+        Height="760"
+        Width="850"
+        FontFamily="Segoe UI, Century Gothic, sans-serif"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize">
+
+    <Window.Resources>
+        <!-- Modern Input Style -->
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#D0D5DD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="false" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#2DBE60"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="1.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern PasswordBox Style -->
+        <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#D0D5DD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="false" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="#2DBE60"/>
+                                <Setter TargetName="border" Property="BorderThickness" Value="1.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Primary Green Button -->
+        <Style x:Key="GreenPrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Background" Value="#2DBE60"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#25A252"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#1E8743"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Google Outline Button Style -->
+        <Style x:Key="GoogleButton" TargetType="Button">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#3c4043"/>
+            <Setter Property="BorderBrush" Value="#D0D5DD"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F8FAFC"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#B0B8C4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#F8F9FA">
+        <Border Height="4" Background="#2DBE60" VerticalAlignment="Top" HorizontalAlignment="Stretch"/>
+
+        <!-- Language Switcher Bar -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,15,20,0" Panel.ZIndex="10">
+            <Button Content="English" x:Name="BtnLangEN" Click="SwitchLang_Click" Tag="EN" Margin="0,0,5,0" Padding="10,5" Background="White" BorderBrush="#E0E0E0" Cursor="Hand" FontSize="12"/>
+            <Button Content="Русский" x:Name="BtnLangRU" Click="SwitchLang_Click" Tag="RU" Padding="10,5" Background="White" BorderBrush="#E0E0E0" Cursor="Hand" FontSize="12"/>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40,0,40">
+
+                <!-- Header Logo Icon -->
+                <Viewbox Width="48" Height="48" Margin="0,0,0,14" HorizontalAlignment="Center">
+                    <Canvas Width="24" Height="24">
+                        <Path Fill="#2DBE60" Data="M12,3C7.03,3 2.73,5.1 0,8.44L12,21L24,8.44C21.27,5.1 16.97,3 12,3M12,7C15.17,7 18.06,8.19 20.25,10.15L12,18.82L3.75,10.15C5.94,8.19 8.83,7 12,7Z"/>
+                    </Canvas>
+                </Viewbox>
+
+                <!-- LOGIN CONTAINER -->
+                <StackPanel x:Name="LoginPanel">
+                    <TextBlock x:Name="LoginTitleText" Text="Sign in" FontFamily="Georgia, Times New Roman, serif" FontSize="32" Foreground="#222222" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="LoginSubtext" Text="Log in to your WiFi Heat Map account" FontSize="13" Foreground="#666666" HorizontalAlignment="Center" Margin="0,8,0,24"/>
+
+                    <Border Width="380" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="30,26,30,26">
+                        <StackPanel>
+
+                            <!-- Google Sign-In Button -->
+                            <Button Style="{StaticResource GoogleButton}" Click="GoogleSignIn_Click">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="G" Foreground="#4285F4" FontWeight="Bold" FontSize="16" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="GoogleLoginText" Text="Sign in with Google"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Divider Line with 'or' -->
+                            <Grid Margin="0,18,0,18">
+                                <Border Height="1" Background="#E2E8F0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="LoginOrText" Text="or" Background="White" Foreground="#888888" FontSize="12" Padding="10,0" HorizontalAlignment="Center"/>
+                            </Grid>
+
+                            <TextBlock x:Name="LoginEmailLabel" Text="Email address" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <TextBox x:Name="LoginEmailTextBox" Style="{StaticResource ModernTextBox}" Margin="0,0,0,16"/>
+
+                            <TextBlock x:Name="LoginPasswordLabel" Text="Password" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <PasswordBox x:Name="LoginPasswordBox" Style="{StaticResource ModernPasswordBox}" Margin="0,0,0,22"/>
+
+                            <Button x:Name="LoginBtn" Content="Continue" Style="{StaticResource GreenPrimaryButton}" Click="LoginButton_Click"/>
+
+                            <TextBlock x:Name="LoginErrorText" Foreground="#D93025" TextWrapping="Wrap" HorizontalAlignment="Center" Margin="0,12,0,0" FontSize="13"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,22,0,0">
+                        <TextBlock x:Name="NoAccountText" Text="Don't have an account?" Foreground="#666666" FontSize="13" HorizontalAlignment="Center"/>
+                        <Button x:Name="ShowSignUpBtn" Content="Create account" Background="Transparent" Foreground="#2DBE60" BorderThickness="0" FontSize="14" FontWeight="SemiBold" Cursor="Hand" Click="ShowSignUp_Click" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- SIGN UP CONTAINER -->
+                <StackPanel x:Name="SignUpPanel" Visibility="Collapsed">
+                    <TextBlock x:Name="SignUpTitleText" Text="Create account" FontFamily="Georgia, Times New Roman, serif" FontSize="32" Foreground="#222222" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="SignUpSubtext" Text="Create your WiFi Heat Map account" FontSize="13" Foreground="#666666" HorizontalAlignment="Center" Margin="0,8,0,24"/>
+
+                    <Border Width="380" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="30,26,30,26">
+                        <StackPanel>
+
+                            <!-- Google Sign-Up Button -->
+                            <Button Style="{StaticResource GoogleButton}" Click="GoogleSignIn_Click">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="G" Foreground="#4285F4" FontWeight="Bold" FontSize="16" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="GoogleSignUpText" Text="Sign up with Google"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Divider Line with 'or' -->
+                            <Grid Margin="0,18,0,18">
+                                <Border Height="1" Background="#E2E8F0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SignUpOrText" Text="or" Background="White" Foreground="#888888" FontSize="12" Padding="10,0" HorizontalAlignment="Center"/>
+                            </Grid>
+
+                            <TextBlock x:Name="NameLabel" Text="Name" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <TextBox x:Name="NameTextBox" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
+
+                            <TextBlock x:Name="SignUpEmailLabel" Text="Email address" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <TextBox x:Name="SignUpEmailTextBox" Style="{StaticResource ModernTextBox}" Margin="0,0,0,14"/>
+
+                            <TextBlock x:Name="SignUpPasswordLabel" Text="Password" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <PasswordBox x:Name="SignUpPasswordBox" Style="{StaticResource ModernPasswordBox}" Margin="0,0,0,14"/>
+
+                            <TextBlock x:Name="ConfirmPasswordLabel" Text="Confirm Password" FontSize="13" Foreground="#333333" Margin="0,0,0,6"/>
+                            <PasswordBox x:Name="ConfirmPasswordBox" Style="{StaticResource ModernPasswordBox}" Margin="0,0,0,22"/>
+
+                            <Button x:Name="SignUpBtn" Content="Create account" Style="{StaticResource GreenPrimaryButton}" Click="SignUpButton_Click"/>
+
+                            <TextBlock x:Name="SignUpErrorText" Foreground="#D93025" TextWrapping="Wrap" HorizontalAlignment="Center" Margin="0,12,0,0" FontSize="13"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Margin="0,22,0,0">
+                        <TextBlock x:Name="AlreadyAccountText" Text="Already have an account?" Foreground="#666666" FontSize="13" HorizontalAlignment="Center"/>
+                        <Button x:Name="ShowLoginBtn" Content="Sign in" Background="Transparent" Foreground="#2DBE60" BorderThickness="0" FontSize="14" FontWeight="SemiBold" Cursor="Hand" Click="ShowLogin_Click" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
