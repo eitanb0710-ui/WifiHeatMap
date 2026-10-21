@@ -132,6 +132,9 @@ namespace WifiHeatMap1
         // 6. Logout
         private void BtnLogout_Click(object sender, RoutedEventArgs e)
         {
+            // Clear local persistent session state
+            SessionService.ClearSession();
+
             MainWindow loginWindow = new MainWindow();
             loginWindow.Show();
             this.Close();

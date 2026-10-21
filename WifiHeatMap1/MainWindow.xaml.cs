@@ -22,6 +22,19 @@ namespace WifiHeatMap1
         {
             InitializeComponent();
             ApplyLanguage("EN");
+
+            // Check if user is already logged in on this device
+            CheckAutoLogin();
+        }
+
+        private void CheckAutoLogin()
+        {
+            string? savedUser = SessionService.GetSavedSession();
+            if (!string.IsNullOrEmpty(savedUser))
+            {
+                // Auto-login existing session
+                OpenDashboard();
+            }
         }
 
         private async Task<string> SendMessageToServerAsync(string message)
@@ -60,11 +73,12 @@ namespace WifiHeatMap1
                 return;
             }
 
-            // Send command string through socket
             string response = await SendMessageToServerAsync($"LOGIN|{email}|{password}");
 
             if (response == "OK")
             {
+                // Store user session locally
+                SessionService.SaveSession(email);
                 OpenDashboard();
             }
             else if (response == "ERROR|UseGoogleAuth")
@@ -97,7 +111,6 @@ namespace WifiHeatMap1
                 return;
             }
 
-            // Send command string through socket
             string response = await SendMessageToServerAsync($"SIGNUP|{name}|{email}|{password}");
 
             if (response == "OK")
@@ -131,11 +144,12 @@ namespace WifiHeatMap1
 
                 if (!string.IsNullOrEmpty(idToken))
                 {
-                    // Send command string through socket
                     string response = await SendMessageToServerAsync($"GOOGLE_AUTH|{idToken}");
 
                     if (response == "OK")
                     {
+                        // Store Google OAuth session locally
+                        SessionService.SaveSession(credential.UserId ?? "GoogleUser");
                         OpenDashboard();
                     }
                     else
