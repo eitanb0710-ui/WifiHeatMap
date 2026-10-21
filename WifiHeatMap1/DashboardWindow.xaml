@@ -10,46 +10,49 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Sidebar Panel -->
+        <!-- Sidebar Control Panel -->
         <Border Grid.Column="0" Background="#2D2D30" Padding="15">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top">
                     <TextBlock Text="WiFi Heat Map" Foreground="White" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
 
-                    <Button x:Name="BtnScan" Content="Scan Wi-Fi Networks" Height="38" Margin="0,0,0,10" 
-                            Background="#007ACC" Foreground="White" FontWeight="SemiBold" BorderThickness="0"/>
-
                     <Button x:Name="BtnLoadMap" Content="Load Floor Plan" Height="38" Margin="0,0,0,10" 
-                            Background="#3E3E42" Foreground="White" BorderThickness="0"/>
+                            Background="#007ACC" Foreground="White" FontWeight="SemiBold" BorderThickness="0" Click="BtnLoadMap_Click"/>
 
-                    <Button x:Name="BtnExport" Content="Export Heat Map" Height="38" Margin="0,0,0,20" 
-                            Background="#3E3E42" Foreground="White" BorderThickness="0"/>
+                    <Button x:Name="BtnScan" Content="Scan Wi-Fi Networks" Height="38" Margin="0,0,0,10" 
+                            Background="#3E3E42" Foreground="White" BorderThickness="0" Click="BtnScan_Click"/>
+
+                    <Button x:Name="BtnClear" Content="Clear Heat Points" Height="38" Margin="0,0,0,20" 
+                            Background="#3E3E42" Foreground="White" BorderThickness="0" Click="BtnClear_Click"/>
 
                     <Separator Background="#3E3E42" Margin="0,10"/>
 
                     <TextBlock Text="Status" Foreground="White" FontWeight="Bold" Margin="0,10,0,5"/>
-                    <TextBlock x:Name="TxtStatus" Text="Connected to server (Port 5000)" Foreground="#00FF7F" FontSize="12" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtStatus" Text="Ready to load floor plan." Foreground="#00FF7F" FontSize="12" TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- User Info at Bottom -->
                 <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
                     <Separator Background="#3E3E42" Margin="0,10"/>
                     <Button x:Name="BtnLogout" Content="Logout" Height="32" 
-                            Background="#D9534F" Foreground="White" BorderThickness="0"/>
+                            Background="#D9534F" Foreground="White" BorderThickness="0" Click="BtnLogout_Click"/>
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- Main Heat Map Viewport Area -->
+        <!-- Interactive Heat Map Area -->
         <Grid Grid.Column="1" Margin="10">
             <Border BorderBrush="#3E3E42" BorderThickness="1" Background="#252526" CornerRadius="4">
                 <Grid x:Name="MapViewport">
                     <TextBlock x:Name="TxtPlaceholder" 
-                               Text="Load a floor plan image to start mapping signal strength" 
-                               Foreground="#888888" 
-                               FontSize="16" 
-                               HorizontalAlignment="Center" 
-                               VerticalAlignment="Center"/>
+                               Text="Click 'Load Floor Plan' to upload a layout image, then click anywhere to map signal points." 
+                               Foreground="#888888" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <Grid x:Name="CanvasContainer" HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <Image x:Name="ImgFloorPlan" Stretch="None"/>
+                            <Canvas x:Name="HeatMapCanvas" Background="Transparent" MouseLeftButtonDown="HeatMapCanvas_MouseLeftButtonDown"/>
+                        </Grid>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>
