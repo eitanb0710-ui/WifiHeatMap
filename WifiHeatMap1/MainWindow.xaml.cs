@@ -1,11 +1,12 @@
-﻿using Google.Apis.Auth.OAuth2;
-using System;
+﻿using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using Google.Apis.Auth.OAuth2;
 
 namespace WifiHeatMap1
 {
@@ -22,7 +23,6 @@ namespace WifiHeatMap1
             InitializeComponent();
             ApplyLanguage("EN");
         }
-
 
         private async Task<string> SendMessageToServerAsync(string message)
         {
@@ -65,8 +65,7 @@ namespace WifiHeatMap1
 
             if (response == "OK")
             {
-                string successMsg = _currentLang == "RU" ? "Успешный вход!" : "Login Successful!";
-                MessageBox.Show(successMsg, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                OpenDashboard();
             }
             else if (response == "ERROR|UseGoogleAuth")
             {
@@ -137,8 +136,7 @@ namespace WifiHeatMap1
 
                     if (response == "OK")
                     {
-                        string successMsg = _currentLang == "RU" ? "Успешный вход через Google!" : "Google Sign-In Successful!";
-                        MessageBox.Show(successMsg, "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        OpenDashboard();
                     }
                     else
                     {
@@ -151,6 +149,13 @@ namespace WifiHeatMap1
             {
                 MessageBox.Show($"Google Auth Error: {ex.Message}");
             }
+        }
+
+        private void OpenDashboard()
+        {
+            DashboardWindow dashboard = new DashboardWindow();
+            dashboard.Show();
+            this.Close();
         }
 
         private void SwitchLang_Click(object sender, RoutedEventArgs e)
