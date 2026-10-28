@@ -1,198 +1,130 @@
 ﻿<Window x:Class="WifiHeatMap1.UserManualWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WiFi Heat Map - User Manual"
-        Width="900"
-        Height="710"
-        MinWidth="700"
-        MinHeight="520"
+        Title="WiFi Heat Map | User Manual"
+        Width="850" Height="670"
+        MinWidth="660" MinHeight="490"
         WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
         Background="#0C1624"
-        FontFamily="Segoe UI"
-        ShowInTaskbar="False">
+        FontFamily="Segoe UI">
 
     <Window.Resources>
 
-        <!-- Section headings -->
-        <Style x:Key="ManualHeading" TargetType="TextBlock">
+        <Style x:Key="SectionHeading" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#72DFCC"/>
             <Setter Property="FontSize" Value="17"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="#67DCCC"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
 
-        <!-- Manual body text -->
-        <Style x:Key="ManualBody" TargetType="TextBlock">
+        <Style x:Key="Description" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#D4E1EA"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Foreground" Value="#C8D7E4"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
             <Setter Property="LineHeight" Value="21"/>
         </Style>
 
-        <!-- Information cards -->
-        <Style x:Key="ManualCard" TargetType="Border">
-            <Setter Property="Background" Value="#1A2B3E"/>
-            <Setter Property="BorderBrush" Value="#30475B"/>
+        <Style x:Key="HelpCard" TargetType="Border">
+            <Setter Property="Background" Value="#1B3044"/>
+            <Setter Property="BorderBrush" Value="#365066"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="17"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="18"/>
             <Setter Property="Margin" Value="0,0,0,13"/>
-        </Style>
-
-        <!-- Tab styling -->
-        <Style TargetType="TabItem">
-            <Setter Property="Foreground" Value="#C0D1DF"/>
-            <Setter Property="Background" Value="#1C3044"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="14,12"/>
-
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-
-                        <Border x:Name="TabBorder"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="8,8,0,0"
-                                Margin="0,0,5,0"
-                                Padding="{TemplateBinding Padding}">
-
-                            <ContentPresenter
-                                ContentSource="Header"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"/>
-                        </Border>
-
-                        <ControlTemplate.Triggers>
-
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="TabBorder"
-                                        Property="Background"
-                                        Value="#167F7D"/>
-
-                                <Setter Property="Foreground"
-                                        Value="White"/>
-                            </Trigger>
-
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBorder"
-                                        Property="Opacity"
-                                        Value="0.85"/>
-                            </Trigger>
-
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
     </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="95"/>
+            <RowDefinition Height="90"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="45"/>
+            <RowDefinition Height="40"/>
         </Grid.RowDefinitions>
 
         <!-- HEADER -->
         <Border Grid.Row="0"
-                Background="#101E2F"
+                Background="#111F30"
+                Padding="26,15"
                 BorderBrush="#304357"
                 BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock
+                    Text="WiFi Heat Map | User Manual"
+                    Foreground="White"
+                    FontSize="22"
+                    FontWeight="Bold"/>
 
-            <StackPanel Margin="28,18">
-                <TextBlock Text="WiFi Heat Map"
-                           FontSize="23"
-                           FontWeight="Bold"
-                           Foreground="White"/>
-
-                <TextBlock Text="USER MANUAL  |  NETWORK ANALYSIS STUDIO"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Foreground="#62D8CC"
-                           Margin="0,5,0,0"/>
+                <TextBlock
+                    Text="TWO WORKFLOWS, ONE FLOOR PLAN"
+                    Foreground="#72DFCC"
+                    FontSize="11"
+                    Margin="0,6,0,0"/>
             </StackPanel>
         </Border>
 
-        <!-- MANUAL CONTENT -->
+        <!-- MANUAL -->
         <TabControl Grid.Row="1"
-                    Margin="22,20,22,10"
-                    Background="#0C1624"
-                    BorderThickness="0">
+                    Margin="20"
+                    Background="#0C1624">
 
-            <!-- ================================== -->
-            <!-- TAB 1: QUICK START                 -->
-            <!-- ================================== -->
-
+            <!-- QUICK START -->
             <TabItem Header="Quick Start">
-
                 <ScrollViewer
                     Background="#0C1624"
                     VerticalScrollBarVisibility="Auto">
-
-                    <StackPanel Margin="7,18,16,20">
-
-                        <TextBlock Text="Getting Started"
-                                   Style="{StaticResource ManualHeading}"/>
+                    <StackPanel Margin="12,19,18,15">
 
                         <TextBlock
-                            Text="Follow these steps to create your first WiFi coverage map."
-                            Style="{StaticResource ManualBody}"
-                            Margin="0,0,0,18"/>
+                            Text="Getting started"
+                            Style="{StaticResource SectionHeading}"/>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="01  Load a Floor Plan"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Step 1 — Load a floor plan"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Click Load Floor Plan in the left sidebar. Select an image of your building or room. Supported formats include PNG, JPG, JPEG, and BMP."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Click Load Floor Plan. Choose a PNG, JPG, JPEG, or BMP image. The same image is used by both workflows."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="02  Select Live Wi-Fi Survey"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Step 2 — Calibrate"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Select Live Wi-Fi Survey from the Mapping Mode section. The network-selection controls will appear."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Click Calibrate Distance, draw across a known length, and enter the distance in meters. Calibration is shared across both workflows."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="03  Choose an Access Point"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Step 3 — Choose a workflow"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Click Refresh Wi-Fi Networks. Select the wireless access point you want to analyze from the dropdown. Each entry includes its network name, signal strength, and BSSID."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="LIVE SURVEY measures actual RSSI and builds an IDW map. PREDICTIVE PLAN simulates a virtual router and walls. Switch using the two tabs in the left sidebar."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="04  Record Measurements"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Switching safely"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Move your laptop to a location in the building. Click the matching location on the floor plan. A numbered measurement marker will appear. Repeat this at several locations."
-                                    Style="{StaticResource ManualBody}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="05  Generate the Heat Map"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="Click Generate Heat Map. The application will estimate signal strength between the recorded measurement points and display a colored overlay on your floor plan."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Switching tabs keeps both sets of data. Each tab has its own Clear button. Loading a new floor plan erases both sets of data after confirmation."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
@@ -200,201 +132,68 @@
                 </ScrollViewer>
             </TabItem>
 
-
-            <!-- ================================== -->
-            <!-- TAB 2: LIVE SURVEY                 -->
-            <!-- ================================== -->
-
+            <!-- LIVE SURVEY -->
             <TabItem Header="Live Survey">
-
                 <ScrollViewer
                     Background="#0C1624"
                     VerticalScrollBarVisibility="Auto">
-
-                    <StackPanel Margin="7,18,16,20">
-
-                        <TextBlock Text="Live WiFi Survey"
-                                   Style="{StaticResource ManualHeading}"/>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="What Is a WiFi Survey?"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="A WiFi survey records wireless signal strength at different physical locations. The application attaches each RSSI measurement to a position selected on the floor plan."
-                                    Style="{StaticResource ManualBody}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="SSID and BSSID"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="SSID is the name of a wireless network. BSSID identifies a particular access point radio. Multiple access points may use the same SSID, so selecting a BSSID helps keep your measurements consistent."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="If you want to measure another BSSID, clear the current survey first."
-                                    Foreground="#F2CC85"
-                                    FontSize="12"
-                                    TextWrapping="Wrap"
-                                    Margin="0,12,0,0"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="Understanding RSSI"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="RSSI is the received signal strength indicator. In this application it is displayed in dBm. Values closer to zero generally indicate stronger received signals."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="Example: -40 dBm is stronger than -80 dBm."
-                                    Foreground="#65E0CA"
-                                    FontWeight="SemiBold"
-                                    Margin="0,12,0,0"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="How Many Points Should I Record?"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="Collect measurements in multiple rooms and at different distances. Five to ten well-distributed points are a useful starting point, but larger areas may require more."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="A single measurement does not reveal the router's location or provide enough information for an accurate coverage map."
-                                    Foreground="#F2CC85"
-                                    FontSize="12"
-                                    TextWrapping="Wrap"
-                                    Margin="0,12,0,0"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="Inverse Distance Weighting"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="The measured heat map uses inverse distance weighting (IDW). Nearby measurements generally influence a predicted location more strongly than distant measurements. The colors between measurement points are estimates, not additional real measurements."
-                                    Style="{StaticResource ManualBody}"/>
-                            </StackPanel>
-                        </Border>
-
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-
-            <!-- ================================== -->
-            <!-- TAB 3: PREDICTIVE MAPPING          -->
-            <!-- ================================== -->
-
-            <TabItem Header="Prediction">
-
-                <ScrollViewer
-                    Background="#0C1624"
-                    VerticalScrollBarVisibility="Auto">
-
-                    <StackPanel Margin="7,18,16,20">
-
-                        <TextBlock Text="Predictive WiFi Modeling"
-                                   Style="{StaticResource ManualHeading}"/>
+                    <StackPanel Margin="12,19,18,15">
 
                         <TextBlock
-                            Text="Predictive mode estimates coverage using a virtual router, distance, and user-defined wall attenuation. It is a simulation rather than a new WiFi measurement."
-                            Style="{StaticResource ManualBody}"
-                            Margin="0,0,0,17"/>
+                            Text="Measure real Wi-Fi coverage"
+                            Style="{StaticResource SectionHeading}"/>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Placing a Virtual Router"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Choose an access point"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Select Place Virtual Router in the sidebar. Click on the floor plan where you want the simulated router to be located. The application will display a router marker and calculate a predictive heat map."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="You can click another location in the same mode to reposition the virtual router."
-                                    Style="{StaticResource ManualBody}"
-                                    Margin="0,9,0,0"/>
+                                    Text="Click Refresh Wi-Fi Networks and choose the desired SSID/BSSID. SSID is the network name; BSSID identifies an individual access-point radio. One survey uses one BSSID."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Drawing Walls"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Collect signal samples"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Select Draw Walls. Choose a material from the Wall Properties section. Click and drag on the floor plan to create a wall segment."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="If a virtual router is already placed, the predictive map is recalculated after you add a wall."
-                                    Style="{StaticResource ManualBody}"
-                                    Margin="0,9,0,0"/>
+                                    Text="Stand with your laptop at a real location and click that position on the floor plan. Each click records an RSSI value in dBm. More negative values usually indicate weaker reception."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Available Wall Materials"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Generate the IDW heat map"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Glass: 2 dB attenuation"
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Record at least three samples at different locations. The map updates automatically and can be refreshed with Generate IDW Heat Map. IDW estimates signal between sampled positions."
+                                    Style="{StaticResource Description}"/>
 
                                 <TextBlock
-                                    Text="Drywall: 3 dB attenuation"
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="Brick: 6 dB attenuation"
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="Concrete: 12 dB attenuation"
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="Custom: enter your own attenuation value."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="These are simplified modeling parameters, not universal physical constants."
-                                    Foreground="#F2CC85"
-                                    FontSize="12"
+                                    Margin="0,9,0,0"
+                                    Foreground="#F1CD91"
                                     TextWrapping="Wrap"
-                                    Margin="0,12,0,0"/>
+                                    Text="A sample marker shows where you measured the signal, not the physical router location. IDW cannot identify the router's position."/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="How Predictions Work"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Clear only survey points"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="The application estimates signal reduction with distance from the virtual router. It also subtracts attenuation from wall segments that intersect the simulated signal path."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="The result is intended for comparing possible router locations, not guaranteeing real-world signal strength."
-                                    Style="{StaticResource ManualBody}"
-                                    Margin="0,9,0,0"/>
+                                    Text="Click Clear Measurements to start another survey. Walls and virtual router positions from the Predictive Plan remain intact."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
@@ -402,95 +201,68 @@
                 </ScrollViewer>
             </TabItem>
 
-
-            <!-- ================================== -->
-            <!-- TAB 4: CALIBRATION                 -->
-            <!-- ================================== -->
-
-            <TabItem Header="Calibration">
-
+            <!-- PREDICTIVE PLANNING -->
+            <TabItem Header="Predictive Plan">
                 <ScrollViewer
                     Background="#0C1624"
                     VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,19,18,15">
 
-                    <StackPanel Margin="7,18,16,20">
+                        <TextBlock
+                            Text="Plan Wi-Fi coverage"
+                            Style="{StaticResource SectionHeading}"/>
 
-                        <TextBlock Text="Floor Plan Calibration"
-                                   Style="{StaticResource ManualHeading}"/>
-
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Why Calibration Matters"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Place or move a virtual router"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="A floor-plan image uses pixels, while real buildings use meters. Calibration tells the application how many image units correspond to one real-world meter."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Select Place / move virtual router and click the floor plan. Clicking another location moves it. The program calculates estimated coverage using distance and walls."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Calibration Instructions"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Draw walls"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="1. Load your floor plan."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="2. Select Calibrate Distance."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="3. Find a wall or another line with a known real-world length."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="4. Click and drag a line between its endpoints."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="5. Enter the actual length in meters in the dialog."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="6. Click Apply Scale."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Select Draw wall segments, choose a material, and drag a line along a wall. Default model loss: glass 2 dB, drywall 3 dB, brick 6 dB, concrete 12 dB, or a custom value."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Worked Example"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Generate the prediction"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Suppose you draw a reference line measuring 200 image units, and that line represents 5 meters in the real world."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="After placing a router, the prediction updates automatically when the router moves or a wall is added. Use Generate Prediction to refresh it manually."
+                                    Style="{StaticResource Description}"/>
 
                                 <TextBlock
-                                    Text="Scale = 200 / 5 = 40 image units per meter."
-                                    Foreground="#67DCCC"
-                                    FontFamily="Consolas"
-                                    FontSize="13"
-                                    Margin="0,12,0,0"/>
+                                    Margin="0,9,0,0"
+                                    Foreground="#F1CD91"
+                                    TextWrapping="Wrap"
+                                    Text="This view is a simulation, not a measurement. The wall losses are approximations and should be validated with real readings."/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Decimal Values"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Clear only router and walls"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Both a period and comma can be used as decimal separators in the current input handling. For example, 2.5 and 2,5 represent the same distance."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="Use the longest reliably measured reference distance available for more accurate calibration."
-                                    Style="{StaticResource ManualBody}"
-                                    Margin="0,10,0,0"/>
+                                    Text="Click Clear Router &amp; Walls. Live Survey points are preserved."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
@@ -498,110 +270,78 @@
                 </ScrollViewer>
             </TabItem>
 
-
-            <!-- ================================== -->
-            <!-- TAB 5: TROUBLESHOOTING             -->
-            <!-- ================================== -->
-
-            <TabItem Header="Help &amp; FAQ">
-
+            <!-- CALIBRATION + HELP -->
+            <TabItem Header="Calibration &amp; Help">
                 <ScrollViewer
                     Background="#0C1624"
                     VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,19,18,15">
 
-                    <StackPanel Margin="7,18,16,20">
+                        <TextBlock
+                            Text="Calibration and troubleshooting"
+                            Style="{StaticResource SectionHeading}"/>
 
-                        <TextBlock Text="Troubleshooting and FAQ"
-                                   Style="{StaticResource ManualHeading}"/>
-
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="No WiFi Networks Detected"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Calibrate Distance"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Check that your WiFi adapter is enabled, WiFi is turned on, and Windows has granted the necessary location permissions. Then refresh the network list."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="In either workflow, click Calibrate Distance. Drag from one end of a known distance to the other and enter its real length in meters. For example, a line of 200 map units over 5 meters gives 40 units/m. The temporary line disappears after Apply or Cancel."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Cannot Record a Measurement"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="No Wi-Fi networks appear"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Make sure a floor plan is loaded and an access point has been selected. If the access point is no longer detected, move to an area where it can be received or refresh the list."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Make sure the Wi-Fi adapter is enabled. Check Windows location permissions, then click Refresh Wi-Fi Networks again. The application will not insert fictional readings."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Cannot Switch to Another Access Point"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Why is my heat map empty?"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Your current survey is tied to one BSSID. To start measuring another access point, click Clear Canvas and begin a new survey."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Live Survey needs three or more samples from one access point. Predictive Plan needs a virtual router. Walls are optional."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource ManualCard}">
+                        <Border Style="{StaticResource HelpCard}">
                             <StackPanel>
-                                <TextBlock Text="Heat Map Appears Incorrect"
-                                           Style="{StaticResource ManualHeading}"/>
+                                <TextBlock
+                                    Text="Saving projects"
+                                    Style="{StaticResource SectionHeading}"/>
 
                                 <TextBlock
-                                    Text="Check that your measurement points represent the actual physical locations of your laptop. Record additional points and verify the floor-plan scale."
-                                    Style="{StaticResource ManualBody}"/>
-
-                                <TextBlock
-                                    Text="If the strongest color is displaced from a measurement marker, there may be a mismatch between WPF canvas coordinates and image pixel dimensions. This is a known issue to verify in the current renderer."
-                                    Foreground="#F2CC85"
-                                    FontSize="12"
-                                    TextWrapping="Wrap"
-                                    Margin="0,12,0,0"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="What Does Clear Canvas Do?"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="It removes recorded survey points, drawn walls, the virtual router position, and the heat map overlay. It does not delete your original floor-plan image."
-                                    Style="{StaticResource ManualBody}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <Border Style="{StaticResource ManualCard}">
-                            <StackPanel>
-                                <TextBlock Text="Can I Save My Work?"
-                                           Style="{StaticResource ManualHeading}"/>
-
-                                <TextBlock
-                                    Text="Project saving and loading are planned features and are not yet included in this version of the application. Record your results before clearing the canvas or closing the program."
-                                    Style="{StaticResource ManualBody}"/>
+                                    Text="Saving and reopening full projects is planned but not yet implemented. Closing the app will discard the unsaved workspace."
+                                    Style="{StaticResource Description}"/>
                             </StackPanel>
                         </Border>
 
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
         </TabControl>
 
         <!-- FOOTER -->
         <Border Grid.Row="2"
-                Background="#101E2F"
+                Background="#111F30"
                 BorderBrush="#304357"
                 BorderThickness="0,1,0,0">
-
             <TextBlock
-                Text="WiFi Heat Map | User Manual v1.0 | Current Features"
-                Foreground="#91A7BA"
+                Text="WiFi Heat Map | Built-in User Manual | Two-Workflow Edition"
+                Foreground="#9CB1C1"
                 FontSize="11"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"/>
