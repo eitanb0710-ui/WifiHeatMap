@@ -1,8 +1,11 @@
 ﻿
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,25 +14,43 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.Win32;
 
+// FIX: Resolve the conflict between System.IO.Path
+// and System.Windows.Shapes.Path.
+using Path = System.IO.Path;
+
 namespace WifiHeatMap1
 {
     public partial class DashboardWindow : Window
     {
-        // Both workflows share one floor plan and one scale.
+        // ==========================================
+        // SHARED PROJECT STATE
+        // ==========================================
+
         private readonly WifiScannerService _wifiScanner;
+
         private BitmapImage? _floorPlan;
+        private byte[]? _floorPlanBytes;
+        private string _floorPlanFileName = "floorplan.png";
+
         private double _mapUnitsPerMeter = 35.0;
+        private bool _scaleCalibrated;
 
-        // LIVE SURVEY: measured samples and selected access point.
+        // LIVE SURVEY
+
         private readonly List<SamplePoint> _samples = new();
-        private string? _surveyBssid;
 
-        // PREDICTIVE PLAN: simulated router and wall geometry.
+        private string? _surveyBssid;
+        private string? _surveySsid;
+
+        // PREDICTIVE PLAN
+
         private readonly List<WallSegment> _walls = new();
+
         private Point? _routerPosition;
         private UIElement? _routerMarker;
 
-        // Shared calibration/drawing interaction.
+        // DRAWING AND CALIBRATION
+
         private bool _isCalibrating;
         private bool _isDrawing;
         private Point _dragStart;
@@ -39,26 +60,52 @@ namespace WifiHeatMap1
         private Line? _calibrationLine;
         private double _calibrationLineLength;
 
+        // SAVE / LOAD STATE
+
+        private string? _projectPath;
+        private bool _isDirty;
+        private bool _allowClose;
+
+        // OPTIMIZER STATE
+
+        private int _planningRevision;
+        private bool _isOptimizing;
+        private RouterOptimizationResult? _suggestion;
+        private UIElement? _suggestionMarker;
+
+        // USER MANUAL
+
         private UserManualWindow? _userManualWindow;
 
         private bool IsSurveyActive =>
             ModeTabs.SelectedItem == TabSurvey;
 
-        private bool HasFloorPlan => _floorPlan != null;
+        private bool HasFloorPlan =>
+            _floorPlan != null;
+
+
+        // ==========================================
+        // CONSTRUCTOR
+        // ==========================================
 
         public DashboardWindow()
         {
             InitializeComponent();
+
             _wifiScanner = new WifiScannerService();
+
             UpdateCounters();
+            UpdateProjectLabel();
         }
 
-        // =====================================================
+
+        // ==========================================
         // USER MANUAL
-        // =====================================================
+        // ==========================================
 
         private void BtnUserManual_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             if (_userManualWindow != null &&
                 _userManualWindow.IsVisible)
@@ -85,111 +132,587 @@ namespace WifiHeatMap1
             _userManualWindow.Show();
         }
 
-        // =====================================================
-        // FLOOR PLAN: SHARED BY BOTH WORKFLOWS
-        // =====================================================
 
-        private void BtnLoadMap_Click(
-            object sender, RoutedEventArgs e)
+        // ==========================================
+        // SAVE PROJECT / SAVE AS
+        // ==========================================
+
+        private void BtnSaveProject_Click(
+            object sender,
+            RoutedEventArgs e)
         {
+            SaveProject(false);
+        }
+
+        private void BtnSaveAs_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            SaveProject(true);
+        }
+
+        private bool SaveProject(bool saveAs)
+        {
+            if (_floorPlanBytes == null)
+            {
+                MessageBox.Show(
+                    "Load a floor plan before saving.",
+                    "Nothing to Save",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return false;
+            }
+
+            string? path = _projectPath;
+
+            if (saveAs || string.IsNullOrWhiteSpace(path))
+            {
+                SaveFileDialog dialog = new()
+                {
+                    Title = "Save WiFi Heat Map project",
+
+                    Filter =
+                        "WiFi Heat Map Project (*.wifimap)|" +
+                        "*.wifimap",
+
+                    DefaultExt = ".wifimap",
+                    AddExtension = true,
+
+                    FileName = _projectPath == null
+                        ? "My WiFi Map.wifimap"
+                        : Path.GetFileName(_projectPath)
+                };
+
+                if (dialog.ShowDialog() != true)
+                    return false;
+
+                path = dialog.FileName;
+            }
+
+            try
+            {
+                WifiMapProject data = new()
+                {
+                    FloorPlanFileName = _floorPlanFileName,
+
+                    MapUnitsPerMeter = _mapUnitsPerMeter,
+                    ScaleCalibrated = _scaleCalibrated,
+
+                    SurveyBssid = _surveyBssid,
+                    SurveySsid = _surveySsid,
+
+                    RouterPosition = _routerPosition.HasValue
+                        ? MapPointData.FromPoint(
+                            _routerPosition.Value)
+                        : null,
+
+                    ShowPredictiveWorkspace =
+                        !IsSurveyActive,
+
+                    Samples = _samples.Select(
+                        s => new SurveySampleData
+                        {
+                            X = s.Position.X,
+                            Y = s.Position.Y,
+                            Rssi = s.Rssi
+                        }).ToList(),
+
+                    Walls = _walls.Select(
+                        w => new WallData
+                        {
+                            X1 = w.Start.X,
+                            Y1 = w.Start.Y,
+                            X2 = w.End.X,
+                            Y2 = w.End.Y,
+
+                            Material = w.Material.ToString(),
+
+                            CustomAttenuationDb =
+                                w.CustomAttenuationDb
+                        }).ToList()
+                };
+
+                ProjectStorage.Save(
+                    path!,
+                    data,
+                    _floorPlanBytes);
+
+                _projectPath = path;
+                _isDirty = false;
+
+                UpdateProjectLabel();
+
+                TxtStatus.Text =
+                    "Project saved: " +
+                    Path.GetFileName(path);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Could not save project:\n" +
+                    ex.Message,
+                    "Save Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+
+                return false;
+            }
+        }
+
+
+        // ==========================================
+        // OPEN PROJECT
+        // ==========================================
+
+        private void BtnOpenProject_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (!ConfirmDiscard())
+                return;
+
             OpenFileDialog dialog = new()
             {
-                Title = "Choose a floor plan",
-                Filter = "Image Files|*.png;*.jpg;*.jpeg;*.bmp"
+                Title = "Open WiFi Heat Map project",
+
+                Filter =
+                    "WiFi Heat Map Project (*.wifimap)|" +
+                    "*.wifimap"
             };
 
             if (dialog.ShowDialog() != true)
                 return;
 
-            if (_samples.Count > 0 ||
-                _walls.Count > 0 ||
-                _routerPosition.HasValue)
-            {
-                MessageBoxResult answer = MessageBox.Show(
-                    "Loading another floor plan will erase both " +
-                    "workflows' measurements, walls, and router " +
-                    "position. Continue?",
-                    "Replace Floor Plan",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-
-                if (answer != MessageBoxResult.Yes)
-                    return;
-            }
-
             try
             {
-                BitmapImage image = new();
+                // Validate before changing current work.
+                LoadedWifiMapProject loaded =
+                    ProjectStorage.Load(dialog.FileName);
 
-                image.BeginInit();
-                image.UriSource = new Uri(dialog.FileName);
-                image.CacheOption = BitmapCacheOption.OnLoad;
-                image.EndInit();
+                BitmapImage image = DecodeImage(
+                    loaded.FloorPlanBytes);
 
-                // Load successfully before discarding old data.
+                ValidatePositions(
+                    loaded.Project,
+                    image.Width,
+                    image.Height);
+
+                // Everything was decoded successfully.
                 ResetBothWorkflows();
 
                 _floorPlan = image;
-                _mapUnitsPerMeter = 35.0;
+                _floorPlanBytes = loaded.FloorPlanBytes;
 
-                // All positions and renderer dimensions use
-                // the same WPF coordinate system.
-                double width = image.Width;
-                double height = image.Height;
+                _floorPlanFileName = Path.GetFileName(
+                    loaded.Project.FloorPlanFileName);
 
-                CanvasContainer.Width = width;
-                CanvasContainer.Height = height;
+                _mapUnitsPerMeter =
+                    loaded.Project.MapUnitsPerMeter;
 
-                ImgFloorPlan.Width = width;
-                ImgFloorPlan.Height = height;
+                _scaleCalibrated =
+                    loaded.Project.ScaleCalibrated;
 
-                ImgHeatMapOverlay.Width = width;
-                ImgHeatMapOverlay.Height = height;
+                ConfigureFloorPlan(image);
 
-                SurveyCanvas.Width = width;
-                SurveyCanvas.Height = height;
+                // Restore the network identity.
+                _surveyBssid =
+                    loaded.Project.SurveyBssid;
 
-                PlanningCanvas.Width = width;
-                PlanningCanvas.Height = height;
+                _surveySsid =
+                    loaded.Project.SurveySsid;
 
-                ImgFloorPlan.Source = image;
+                RestoreSavedNetwork();
 
-                TxtPlaceholder.Visibility =
-                    Visibility.Collapsed;
+                // Restore actual RSSI samples.
+                foreach (SurveySampleData s
+                         in loaded.Project.Samples)
+                {
+                    Point position = new Point(s.X, s.Y);
 
-                TxtScaleDisplay.Text =
-                    "Scale: 35.0 map units/m (default)";
+                    _samples.Add(new SamplePoint
+                    {
+                        Position = position,
+                        Rssi = s.Rssi
+                    });
 
+                    AddSurveyMarker(
+                        _samples.Count,
+                        position,
+                        s.Rssi,
+                        _surveySsid ?? "Saved network",
+                        _surveyBssid ?? "");
+                }
+
+                // Restore walls and materials.
+                foreach (WallData w
+                         in loaded.Project.Walls)
+                {
+                    WallMaterial material =
+                        Enum.Parse<WallMaterial>(
+                            w.Material);
+
+                    WallSegment segment = new()
+                    {
+                        Start = new Point(w.X1, w.Y1),
+                        End = new Point(w.X2, w.Y2),
+
+                        Material = material,
+
+                        CustomAttenuationDb =
+                            w.CustomAttenuationDb
+                    };
+
+                    _walls.Add(segment);
+                    AddWallVisual(segment);
+                }
+
+                // Restore the virtual router.
+                if (loaded.Project.RouterPosition != null)
+                {
+                    PlaceRouter(
+                        loaded.Project.RouterPosition.ToPoint(),
+                        false);
+                }
+
+                // Restore the last selected workspace.
+                ModeTabs.SelectedItem =
+                    loaded.Project.ShowPredictiveWorkspace
+                        ? TabPlanning
+                        : TabSurvey;
+
+                UpdateScaleLabel();
+                UpdateCounters();
                 RefreshCurrentOverlay(false);
 
+                _projectPath = dialog.FileName;
+                _isDirty = false;
+
+                UpdateProjectLabel();
+
                 TxtStatus.Text =
-                    "Floor plan loaded. Select a workflow to begin.";
+                    "Opened " +
+                    Path.GetFileName(dialog.FileName);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Could not open the floor plan:\n" +
+                    "Could not open project:\n" +
                     ex.Message,
-                    "Image Error",
+                    "Open Project Error",
                     MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                    MessageBoxImage.Error);
             }
         }
 
-        // =====================================================
-        // TWO WORKFLOWS: SWITCH WITHOUT MIXING DATA
-        // =====================================================
+
+        // ==========================================
+        // VALIDATE LOADED MAP OBJECT POSITIONS
+        // ==========================================
+
+        private static void ValidatePositions(
+            WifiMapProject project,
+            double width,
+            double height)
+        {
+            static bool Inside(
+                double x,
+                double y,
+                double w,
+                double h)
+            {
+                return x >= 0 &&
+                       y >= 0 &&
+                       x <= w &&
+                       y <= h;
+            }
+
+            foreach (SurveySampleData s in project.Samples)
+            {
+                if (!Inside(
+                    s.X, s.Y, width, height))
+                {
+                    throw new InvalidDataException(
+                        "A measurement is outside the floor plan.");
+                }
+            }
+
+            foreach (WallData wall in project.Walls)
+            {
+                if (!Inside(
+                        wall.X1,
+                        wall.Y1,
+                        width,
+                        height) ||
+                    !Inside(
+                        wall.X2,
+                        wall.Y2,
+                        width,
+                        height))
+                {
+                    throw new InvalidDataException(
+                        "A wall is outside the floor plan.");
+                }
+            }
+
+            if (project.RouterPosition != null &&
+                !Inside(
+                    project.RouterPosition.X,
+                    project.RouterPosition.Y,
+                    width,
+                    height))
+            {
+                throw new InvalidDataException(
+                    "The router is outside the floor plan.");
+            }
+        }
+
+
+        // ==========================================
+        // RESTORE SAVED NETWORK SELECTION
+        // ==========================================
+
+        private void RestoreSavedNetwork()
+        {
+            CmbSelectedNetwork.Items.Clear();
+
+            if (string.IsNullOrWhiteSpace(_surveyBssid))
+                return;
+
+            ComboBoxItem saved = new()
+            {
+                Content =
+                    $"{_surveySsid ?? "Saved AP"} | " +
+                    $"{_surveyBssid} (saved)",
+
+                Tag = _surveyBssid
+            };
+
+            CmbSelectedNetwork.Items.Add(saved);
+
+            CmbSelectedNetwork.SelectedItem = saved;
+        }
+
+
+        // ==========================================
+        // UNSAVED CHANGES
+        // ==========================================
+
+        private bool ConfirmDiscard()
+        {
+            if (!_isDirty)
+                return true;
+
+            return MessageBox.Show(
+                "You have unsaved changes. " +
+                "Continue without saving them?\n" +
+                "Choose No to return and save your project.",
+                "Unsaved Changes",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning)
+                == MessageBoxResult.Yes;
+        }
+
+        private void DashboardWindow_Closing(
+            object sender,
+            CancelEventArgs e)
+        {
+            if (!_allowClose && !ConfirmDiscard())
+            {
+                e.Cancel = true;
+            }
+        }
+
+        private void UpdateProjectLabel()
+        {
+            if (TxtProjectName == null)
+                return;
+
+            TxtProjectName.Text =
+                (_projectPath == null
+                    ? "Untitled project"
+                    : Path.GetFileName(_projectPath))
+                +
+                (_isDirty ? "  * unsaved" : "");
+        }
+
+        private void MarkDirty(bool planningChanged = false)
+        {
+            _isDirty = true;
+
+            if (planningChanged)
+            {
+                _planningRevision++;
+
+                ClearSuggestion();
+            }
+
+            UpdateProjectLabel();
+        }
+
+
+        // ==========================================
+        // LOAD FLOOR PLAN IMAGE
+        // ==========================================
+
+        private void BtnLoadMap_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            OpenFileDialog dialog = new()
+            {
+                Title = "Choose a floor plan",
+
+                Filter =
+                    "Image Files|" +
+                    "*.png;*.jpg;*.jpeg;*.bmp"
+            };
+
+            if (dialog.ShowDialog() != true ||
+                !ConfirmDiscard())
+            {
+                return;
+            }
+
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(
+                    dialog.FileName);
+
+                if (bytes.Length > 25 * 1024 * 1024)
+                {
+                    throw new InvalidDataException(
+                        "Floor plan image exceeds 25 MB.");
+                }
+
+                BitmapImage image = DecodeImage(bytes);
+
+                ResetBothWorkflows();
+
+                _floorPlan = image;
+                _floorPlanBytes = bytes;
+
+                _floorPlanFileName = Path.GetFileName(
+                    dialog.FileName);
+
+                _mapUnitsPerMeter = 35.0;
+                _scaleCalibrated = false;
+                _projectPath = null;
+
+                ConfigureFloorPlan(image);
+                UpdateScaleLabel();
+
+                MarkDirty(true);
+
+                TxtStatus.Text =
+                    "Floor plan loaded. Save it as a " +
+                    "new .wifimap project.";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Unable to load image:\n" +
+                    ex.Message,
+                    "Floor Plan Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+
+        // ==========================================
+        // DECODE EMBEDDED FLOOR PLAN
+        // ==========================================
+
+        private static BitmapImage DecodeImage(
+            byte[] bytes)
+        {
+            using MemoryStream stream = new(
+                bytes,
+                writable: false);
+
+            BitmapImage image = new();
+
+            image.BeginInit();
+
+            image.CacheOption =
+                BitmapCacheOption.OnLoad;
+
+            image.StreamSource = stream;
+
+            image.EndInit();
+
+            if ((long)image.PixelWidth *
+                image.PixelHeight > 20_000_000L)
+            {
+                throw new InvalidDataException(
+                    "Floor plan exceeds 20 million pixels.");
+            }
+
+            image.Freeze();
+
+            return image;
+        }
+
+
+        // ==========================================
+        // CONFIGURE SHARED MAP DIMENSIONS
+        // ==========================================
+
+        private void ConfigureFloorPlan(BitmapImage image)
+        {
+            double width = image.Width;
+            double height = image.Height;
+
+            CanvasContainer.Width = width;
+            CanvasContainer.Height = height;
+
+            ImgFloorPlan.Width = width;
+            ImgFloorPlan.Height = height;
+
+            ImgHeatMapOverlay.Width = width;
+            ImgHeatMapOverlay.Height = height;
+
+            SurveyCanvas.Width = width;
+            SurveyCanvas.Height = height;
+
+            PlanningCanvas.Width = width;
+            PlanningCanvas.Height = height;
+
+            ImgFloorPlan.Source = image;
+
+            TxtPlaceholder.Visibility =
+                Visibility.Collapsed;
+        }
+
+        private void UpdateScaleLabel()
+        {
+            TxtScaleDisplay.Text =
+                $"Scale: {_mapUnitsPerMeter:F1} map units/m"
+                +
+                (_scaleCalibrated
+                    ? " (calibrated)"
+                    : " (default — calibrate)");
+        }
+
+
+        // ==========================================
+        // SWITCH WORKSPACES
+        // ==========================================
 
         private void ModeTabs_SelectionChanged(
-            object sender, SelectionChangedEventArgs e)
+            object sender,
+            SelectionChangedEventArgs e)
         {
-            // Ignore events bubbling up from combo boxes.
             if (!ReferenceEquals(
-                    e.OriginalSource, ModeTabs) ||
+                    e.OriginalSource,
+                    ModeTabs) ||
                 SurveyCanvas == null ||
                 PlanningCanvas == null ||
-                ImgHeatMapOverlay == null ||
-                TxtWorkspaceTitle == null)
+                TxtWorkspaceTitle == null ||
+                TxtStatus == null)
             {
                 return;
             }
@@ -213,62 +736,48 @@ namespace WifiHeatMap1
 
             TxtWorkspaceSubtitle.Text = survey
                 ? "Actual measurements and IDW interpolation"
-                : "Virtual router placement and wall-aware simulation";
+                : "Simulated router placement and wall-aware coverage";
 
             TxtModeBadge.Text = survey
                 ? "MEASURED"
                 : "SIMULATED";
 
             TxtMapHint.Text = survey
-                ? "Stand at a real location, then click the same " +
-                  "position on the plan."
-                : "Click to place a router, or select Draw Walls " +
-                  "and drag a wall segment.";
+                ? "Stand at a real location, then click " +
+                  "the matching spot on the plan."
+                : "Click to place a router, or select " +
+                  "Draw Walls and drag a segment.";
 
             RefreshCurrentOverlay(false);
-
-            TxtStatus.Text = survey
-                ? "Live Survey selected. Only real measurement " +
-                  "markers are shown."
-                : "Predictive Plan selected. Only the virtual " +
-                  "router and walls are shown.";
         }
 
+
+        // ==========================================
+        // PREDICTIVE DRAWING TOOL CHANGED
+        // ==========================================
+
         private void PlanTool_Changed(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             if (PanelWallMaterial == null ||
-                RadioDrawWalls == null ||
-                TxtMapHint == null)
+                RadioDrawWalls == null)
             {
                 return;
             }
 
-            bool walls = RadioDrawWalls.IsChecked == true;
-
-            PanelWallMaterial.Visibility = walls
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-
-            if (ModeTabs != null &&
-                !IsSurveyActive &&
-                !_isCalibrating)
-            {
-                TxtMapHint.Text = walls
-                    ? "Drag from one end of a wall to the other."
-                    : "Click where you want the virtual router " +
-                      "to be placed.";
-            }
+            PanelWallMaterial.Visibility =
+                RadioDrawWalls.IsChecked == true
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
 
         private void CmbWallMaterial_SelectionChanged(
-            object sender, SelectionChangedEventArgs e)
+            object sender,
+            SelectionChangedEventArgs e)
         {
-            if (PanelCustomWallLoss == null ||
-                CmbWallMaterial == null)
-            {
+            if (PanelCustomWallLoss == null)
                 return;
-            }
 
             bool custom =
                 CmbWallMaterial.SelectedItem
@@ -280,14 +789,16 @@ namespace WifiHeatMap1
                 : Visibility.Collapsed;
         }
 
-        // =====================================================
-        // LIVE SURVEY: BSSID SELECTOR
-        // =====================================================
+
+        // ==========================================
+        // SCAN WIFI NETWORKS
+        // ==========================================
 
         private void BtnRefreshNetworks_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
-            string? prior =
+            string? previous =
                 (CmbSelectedNetwork.SelectedItem
                     as ComboBoxItem)?.Tag?.ToString();
 
@@ -295,31 +806,29 @@ namespace WifiHeatMap1
 
             try
             {
-                var accessPoints =
-                    _wifiScanner.ScanNetworks();
-
-                HashSet<string> uniqueBssids =
-                    new(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> seen = new(
+                    StringComparer.OrdinalIgnoreCase);
 
                 ComboBoxItem? preferred = null;
 
-                foreach (var ap in accessPoints)
+                foreach (AccessPointInfo ap
+                         in _wifiScanner.ScanNetworks())
                 {
                     if (string.IsNullOrWhiteSpace(ap.Bssid) ||
-                        !uniqueBssids.Add(ap.Bssid))
+                        !seen.Add(ap.Bssid))
                     {
                         continue;
                     }
 
                     string ssid =
                         string.IsNullOrWhiteSpace(ap.Ssid)
-                        ? "[Hidden network]"
-                        : ap.Ssid;
+                            ? "[Hidden network]"
+                            : ap.Ssid;
 
-                    ComboBoxItem option = new()
+                    ComboBoxItem item = new()
                     {
                         Content =
-                            $"{ssid}  |  {ap.Rssi} dBm  |  " +
+                            $"{ssid} | {ap.Rssi} dBm | " +
                             $"{ap.Bssid}",
 
                         Tag = ap.Bssid,
@@ -330,14 +839,14 @@ namespace WifiHeatMap1
                             $"RSSI: {ap.Rssi} dBm"
                     };
 
-                    CmbSelectedNetwork.Items.Add(option);
+                    CmbSelectedNetwork.Items.Add(item);
 
                     if (string.Equals(
                         ap.Bssid,
-                        prior ?? _surveyBssid,
+                        previous ?? _surveyBssid,
                         StringComparison.OrdinalIgnoreCase))
                     {
-                        preferred = option;
+                        preferred = item;
                     }
                 }
 
@@ -349,20 +858,26 @@ namespace WifiHeatMap1
 
                 TxtStatus.Text =
                     CmbSelectedNetwork.Items.Count > 0
-                    ? $"Found {CmbSelectedNetwork.Items.Count} " +
-                      "access points. Select one."
-                    : "No access points found. Check Wi-Fi " +
-                      "and Windows location permissions.";
+                        ? $"Found {CmbSelectedNetwork.Items.Count} " +
+                          "access points. Select one."
+                        : "No access points detected. " +
+                          "Check Wi-Fi and Windows location permissions.";
             }
             catch (Exception ex)
             {
                 TxtStatus.Text =
-                    "Wi-Fi scanning failed: " + ex.Message;
+                    "Wi-Fi scan failed: " + ex.Message;
             }
         }
 
+
+        // ==========================================
+        // LIVE SURVEY CANVAS
+        // ==========================================
+
         private void SurveyCanvas_MouseLeftButtonDown(
-            object sender, MouseButtonEventArgs e)
+            object sender,
+            MouseButtonEventArgs e)
         {
             if (!HasFloorPlan ||
                 ModalScalePrompt.Visibility ==
@@ -371,28 +886,34 @@ namespace WifiHeatMap1
                 return;
             }
 
-            Point point = e.GetPosition(SurveyCanvas);
+            Point point =
+                e.GetPosition(SurveyCanvas);
 
             if (_isCalibrating)
             {
                 BeginLine(SurveyCanvas, point, true);
-                return;
             }
-
-            RecordSurveyPoint(point);
+            else
+            {
+                RecordSurveyPoint(point);
+            }
         }
+
+
+        // ==========================================
+        // RECORD REAL RSSI SAMPLE
+        // ==========================================
 
         private void RecordSurveyPoint(Point position)
         {
             if (CmbSelectedNetwork.SelectedItem
-                    is not ComboBoxItem selection ||
-                selection.Tag is not string bssid ||
+                    is not ComboBoxItem selected ||
+                selected.Tag is not string bssid ||
                 string.IsNullOrWhiteSpace(bssid))
             {
                 MessageBox.Show(
-                    "First select a Wi-Fi access point " +
-                    "from the list.",
-                    "Select Access Point",
+                    "Select an access point first.",
+                    "No Network",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
 
@@ -406,9 +927,9 @@ namespace WifiHeatMap1
                     StringComparison.OrdinalIgnoreCase))
             {
                 MessageBox.Show(
-                    "This survey already contains measurements " +
+                    "This survey contains readings " +
                     "from another BSSID. Clear Measurements " +
-                    "before switching access points.",
+                    "before switching.",
                     "Different Access Point",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -420,8 +941,8 @@ namespace WifiHeatMap1
             {
                 AccessPointInfo? ap =
                     _wifiScanner.ScanNetworks()
-                        .FirstOrDefault(n =>
-                            string.Equals(
+                        .FirstOrDefault(
+                            n => string.Equals(
                                 n.Bssid,
                                 bssid,
                                 StringComparison.OrdinalIgnoreCase));
@@ -429,14 +950,8 @@ namespace WifiHeatMap1
                 if (ap == null)
                 {
                     TxtStatus.Text =
-                        "Selected access point is not " +
-                        "currently detected.";
-
-                    MessageBox.Show(
-                        "Try refreshing the access point list.",
-                        "Access Point Unavailable",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                        "Selected access point not found. " +
+                        "Refresh the list.";
 
                     return;
                 }
@@ -444,8 +959,7 @@ namespace WifiHeatMap1
                 if (ap.Rssi >= 0 || ap.Rssi < -120)
                 {
                     TxtStatus.Text =
-                        "Invalid RSSI reading; " +
-                        "no sample recorded.";
+                        "Invalid RSSI; no sample recorded.";
 
                     return;
                 }
@@ -457,56 +971,122 @@ namespace WifiHeatMap1
                 });
 
                 _surveyBssid = bssid;
+                _surveySsid = ap.Ssid;
 
-                Grid marker =
-                    CreateSurveyMarker(_samples.Count, ap.Rssi);
+                AddSurveyMarker(
+                    _samples.Count,
+                    position,
+                    ap.Rssi,
+                    ap.Ssid,
+                    bssid);
 
-                marker.ToolTip =
-                    $"Sample {_samples.Count}\n" +
-                    $"SSID: {ap.Ssid}\n" +
-                    $"BSSID: {ap.Bssid}\n" +
-                    $"RSSI: {ap.Rssi} dBm";
-
-                Canvas.SetLeft(marker, position.X - 12);
-                Canvas.SetTop(marker, position.Y - 12);
-
-                SurveyCanvas.Children.Add(marker);
-
+                MarkDirty();
                 UpdateCounters();
                 RefreshCurrentOverlay(false);
 
                 TxtStatus.Text =
                     _samples.Count < 3
-                    ? $"Recorded {ap.Rssi} dBm. Add " +
-                      $"{3 - _samples.Count} more point(s) " +
-                      "for IDW."
-                    : $"Recorded {ap.Rssi} dBm. IDW map " +
-                      $"updated ({_samples.Count} points).";
+                        ? $"Recorded {ap.Rssi} dBm. " +
+                          $"{3 - _samples.Count} more for IDW."
+                        : $"Recorded {ap.Rssi} dBm. " +
+                          $"IDW updated ({_samples.Count} points).";
             }
             catch (Exception ex)
             {
                 TxtStatus.Text =
-                    "Measurement failed: " + ex.Message;
+                    "Measurement failed: " +
+                    ex.Message;
             }
         }
 
+
+        // ==========================================
+        // DRAW A SURVEY MARKER
+        // ==========================================
+
+        private void AddSurveyMarker(
+            int number,
+            Point position,
+            double rssi,
+            string ssid,
+            string bssid)
+        {
+            Grid marker = new()
+            {
+                Width = 24,
+                Height = 24
+            };
+
+            marker.Children.Add(new Ellipse
+            {
+                Fill = Brushes.DeepSkyBlue,
+                Stroke = Brushes.White,
+                StrokeThickness = 2
+            });
+
+            marker.Children.Add(new TextBlock
+            {
+                Text = number.ToString(),
+                Foreground = Brushes.Black,
+                FontWeight = FontWeights.Bold,
+                FontSize = 11,
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Center,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            });
+
+            marker.ToolTip =
+                $"Sample {number}\n" +
+                $"SSID: {ssid}\n" +
+                $"BSSID: {bssid}\n" +
+                $"RSSI: {rssi} dBm";
+
+            marker.PreviewMouseLeftButtonDown +=
+                (s, args) => args.Handled = true;
+
+            Canvas.SetLeft(
+                marker,
+                position.X - 12);
+
+            Canvas.SetTop(
+                marker,
+                position.Y - 12);
+
+            SurveyCanvas.Children.Add(marker);
+        }
+
+
+        // ==========================================
+        // GENERATE LIVE SURVEY HEAT MAP
+        // ==========================================
+
         private void BtnGenerateSurvey_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             RefreshCurrentOverlay(true);
         }
 
+
+        // ==========================================
+        // CLEAR LIVE SURVEY
+        // ==========================================
+
         private void BtnClearSurvey_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             if (_samples.Count == 0)
                 return;
 
             if (MessageBox.Show(
-                    "Delete all survey measurements?",
-                    "Clear Survey",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question)
+                "Delete all survey measurements?",
+                "Clear Survey",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question)
                 != MessageBoxResult.Yes)
             {
                 return;
@@ -518,20 +1098,26 @@ namespace WifiHeatMap1
 
             _samples.Clear();
             _surveyBssid = null;
+            _surveySsid = null;
+
+            MarkDirty();
 
             UpdateCounters();
             RefreshCurrentOverlay(false);
 
             TxtStatus.Text =
-                "Survey cleared. Router and walls were kept.";
+                "Survey cleared. Predictive plan " +
+                "remains unchanged.";
         }
 
-        // =====================================================
-        // PREDICTIVE PLAN: ROUTER AND WALLS
-        // =====================================================
+
+        // ==========================================
+        // PREDICTIVE PLANNING CANVAS
+        // ==========================================
 
         private void PlanningCanvas_MouseLeftButtonDown(
-            object sender, MouseButtonEventArgs e)
+            object sender,
+            MouseButtonEventArgs e)
         {
             if (!HasFloorPlan ||
                 ModalScalePrompt.Visibility ==
@@ -540,7 +1126,8 @@ namespace WifiHeatMap1
                 return;
             }
 
-            Point point = e.GetPosition(PlanningCanvas);
+            Point point =
+                e.GetPosition(PlanningCanvas);
 
             if (_isCalibrating)
             {
@@ -552,13 +1139,20 @@ namespace WifiHeatMap1
             }
             else
             {
-                PlaceRouter(point);
+                PlaceRouter(point, true);
             }
         }
 
-        private void PlaceRouter(Point point)
+
+        // ==========================================
+        // PLACE OR REPOSITION ROUTER
+        // ==========================================
+
+        private void PlaceRouter(
+            Point position,
+            bool changed)
         {
-            _routerPosition = point;
+            _routerPosition = position;
 
             if (_routerMarker != null)
             {
@@ -566,12 +1160,55 @@ namespace WifiHeatMap1
                     _routerMarker);
             }
 
-            _routerMarker = CreateRouterMarker();
+            Grid marker = new()
+            {
+                Width = 36,
+                Height = 36
+            };
 
-            Canvas.SetLeft(_routerMarker, point.X - 18);
-            Canvas.SetTop(_routerMarker, point.Y - 18);
+            marker.Children.Add(new Ellipse
+            {
+                Fill = Brushes.DarkRed,
+                Stroke = Brushes.White,
+                StrokeThickness = 2.5
+            });
 
-            PlanningCanvas.Children.Add(_routerMarker);
+            marker.Children.Add(new TextBlock
+            {
+                Text = "AP",
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Bold,
+                FontSize = 12,
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Center,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            });
+
+            marker.ToolTip =
+                "Virtual Wi-Fi router";
+
+            marker.PreviewMouseLeftButtonDown +=
+                (s, e) => e.Handled = true;
+
+            _routerMarker = marker;
+
+            Canvas.SetLeft(
+                marker,
+                position.X - 18);
+
+            Canvas.SetTop(
+                marker,
+                position.Y - 18);
+
+            PlanningCanvas.Children.Add(marker);
+
+            if (changed)
+            {
+                MarkDirty(true);
+            }
 
             UpdateCounters();
             RefreshCurrentOverlay(false);
@@ -580,14 +1217,26 @@ namespace WifiHeatMap1
                 "Virtual router placed. Prediction updated.";
         }
 
+
+        // ==========================================
+        // GENERATE PREDICTIVE HEAT MAP
+        // ==========================================
+
         private void BtnGeneratePrediction_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             RefreshCurrentOverlay(true);
         }
 
+
+        // ==========================================
+        // CLEAR PREDICTIVE PLAN
+        // ==========================================
+
         private void BtnClearPlanning_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             if (_walls.Count == 0 &&
                 !_routerPosition.HasValue)
@@ -596,11 +1245,10 @@ namespace WifiHeatMap1
             }
 
             if (MessageBox.Show(
-                    "Delete the virtual router and all " +
-                    "drawn walls?",
-                    "Clear Prediction",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question)
+                "Delete the virtual router and all walls?",
+                "Clear Prediction",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question)
                 != MessageBoxResult.Yes)
             {
                 return;
@@ -615,20 +1263,281 @@ namespace WifiHeatMap1
             _routerPosition = null;
             _routerMarker = null;
 
+            MarkDirty(true);
+
             UpdateCounters();
             RefreshCurrentOverlay(false);
 
             TxtStatus.Text =
-                "Predictive plan cleared. Survey " +
-                "measurements were kept.";
+                "Predictive plan cleared. " +
+                "Live Survey remains unchanged.";
         }
 
-        // =====================================================
-        // DRAW WALLS OR A CALIBRATION REFERENCE LINE
-        // =====================================================
+
+        // ==========================================
+        // RUN AUTOMATIC ROUTER OPTIMIZATION
+        // ==========================================
+
+        private async void BtnOptimize_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (!HasFloorPlan)
+            {
+                MessageBox.Show(
+                    "Load a floor plan first.",
+                    "No Floor Plan",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            string raw =
+                TxtCoverageThreshold.Text.Trim()
+                    .Replace(',', '.');
+
+            if (!double.TryParse(
+                    raw,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double threshold) ||
+                !double.IsFinite(threshold) ||
+                threshold < -100 ||
+                threshold > -30)
+            {
+                MessageBox.Show(
+                    "Enter an RSSI target between " +
+                    "-100 and -30 dBm.",
+                    "Invalid Coverage Target",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            if (!_scaleCalibrated &&
+                MessageBox.Show(
+                    "The floor plan is not calibrated. " +
+                    "Optimization may be misleading. " +
+                    "Continue anyway?",
+                    "Calibration Recommended",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning)
+                != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            if (_isOptimizing)
+                return;
+
+            ClearSuggestion();
+
+            _isOptimizing = true;
+            BtnOptimize.IsEnabled = false;
+
+            TxtOptimizerResult.Text =
+                "Evaluating candidate locations...";
+
+            TxtStatus.Text =
+                "Finding best virtual router location...";
+
+            // Copy wall geometry before background work.
+            List<WallSegment> snapshot =
+                _walls.Select(
+                    w => new WallSegment
+                    {
+                        Start = w.Start,
+                        End = w.End,
+                        Material = w.Material,
+
+                        CustomAttenuationDb =
+                            w.CustomAttenuationDb
+                    }).ToList();
+
+            double width = PlanningCanvas.Width;
+            double height = PlanningCanvas.Height;
+            double scale = _mapUnitsPerMeter;
+
+            Point? current = _routerPosition;
+            int revision = _planningRevision;
+
+            try
+            {
+                RouterOptimizationResult result =
+                    await Task.Run(
+                        () => RouterOptimizer.FindBest(
+                            width,
+                            height,
+                            snapshot,
+                            scale,
+                            threshold,
+                            current));
+
+                // Do not apply an outdated result.
+                if (revision != _planningRevision ||
+                    !HasFloorPlan)
+                {
+                    TxtOptimizerResult.Text =
+                        "Plan changed. Run optimization again.";
+
+                    return;
+                }
+
+                _suggestion = result;
+
+                AddSuggestionMarker(
+                    result.BestPosition);
+
+                BtnAcceptBest.IsEnabled = true;
+
+                string before =
+                    result.PreviousCoveragePercent.HasValue
+                        ? $"Current: " +
+                          $"{result.PreviousCoveragePercent.Value:F1}% | "
+                        : "No current router | ";
+
+                TxtOptimizerResult.Text =
+                    before +
+                    $"Suggested: {result.BestCoveragePercent:F1}% " +
+                    $"covered at {threshold:F0} dBm. " +
+                    $"Checked {result.CandidateCount} locations.";
+
+                TxtStatus.Text =
+                    "Green marker shows suggested router " +
+                    "position. Click Apply to use it.";
+            }
+            catch (Exception ex)
+            {
+                TxtOptimizerResult.Text =
+                    "Optimization failed: " +
+                    ex.Message;
+            }
+            finally
+            {
+                _isOptimizing = false;
+                BtnOptimize.IsEnabled = true;
+            }
+        }
+
+
+        // ==========================================
+        // APPLY OPTIMIZER RECOMMENDATION
+        // ==========================================
+
+        private void BtnAcceptBest_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (_suggestion == null)
+                return;
+
+            Point best = _suggestion.BestPosition;
+            double score =
+                _suggestion.BestCoveragePercent;
+
+            // Moves the actual simulated router.
+            PlaceRouter(best, true);
+
+            RadioPlaceAp.IsChecked = true;
+
+            TxtOptimizerResult.Text =
+                $"Applied suggested router position " +
+                $"({score:F1}% modeled coverage).";
+        }
+
+
+        // ==========================================
+        // DRAW SUGGESTED ROUTER MARKER
+        // ==========================================
+
+        private void AddSuggestionMarker(Point position)
+        {
+            Grid marker = new()
+            {
+                Width = 40,
+                Height = 40
+            };
+
+            marker.Children.Add(new Ellipse
+            {
+                Fill = Brushes.ForestGreen,
+                Stroke = Brushes.White,
+                StrokeThickness = 3
+            });
+
+            marker.Children.Add(new TextBlock
+            {
+                Text = "BEST",
+                Foreground = Brushes.White,
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Center,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            });
+
+            marker.IsHitTestVisible = false;
+
+            marker.ToolTip =
+                "Suggested router position " +
+                "(not applied yet)";
+
+            Canvas.SetLeft(
+                marker,
+                position.X - 20);
+
+            Canvas.SetTop(
+                marker,
+                position.Y - 20);
+
+            PlanningCanvas.Children.Add(marker);
+
+            _suggestionMarker = marker;
+        }
+
+
+        // ==========================================
+        // INVALIDATE OLD OPTIMIZATION RESULT
+        // ==========================================
+
+        private void ClearSuggestion()
+        {
+            if (PlanningCanvas != null &&
+                _suggestionMarker != null)
+            {
+                PlanningCanvas.Children.Remove(
+                    _suggestionMarker);
+            }
+
+            _suggestionMarker = null;
+            _suggestion = null;
+
+            if (BtnAcceptBest != null)
+            {
+                BtnAcceptBest.IsEnabled = false;
+            }
+
+            if (TxtOptimizerResult != null)
+            {
+                TxtOptimizerResult.Text =
+                    "Run optimization to compare coverage.";
+            }
+        }
+
+
+        // ==========================================
+        // BEGIN WALL OR CALIBRATION LINE
+        // ==========================================
 
         private void BeginLine(
-            Canvas canvas, Point start, bool calibration)
+            Canvas canvas,
+            Point start,
+            bool calibration)
         {
             AbortDrawing();
 
@@ -647,7 +1556,9 @@ namespace WifiHeatMap1
                     ? Brushes.Magenta
                     : GetWallColor(),
 
-                StrokeThickness = calibration ? 3 : 4,
+                StrokeThickness =
+                    calibration ? 3 : 4,
+
                 IsHitTestVisible = false
             };
 
@@ -661,8 +1572,14 @@ namespace WifiHeatMap1
             canvas.CaptureMouse();
         }
 
+
+        // ==========================================
+        // UPDATE LINE WHILE DRAGGING
+        // ==========================================
+
         private void MapCanvas_MouseMove(
-            object sender, MouseEventArgs e)
+            object sender,
+            MouseEventArgs e)
         {
             if (!_isDrawing ||
                 _drawingCanvas == null ||
@@ -672,16 +1589,22 @@ namespace WifiHeatMap1
                 return;
             }
 
-            Point end = ClampToCanvas(
+            Point p = ClampToCanvas(
                 e.GetPosition(_drawingCanvas),
                 _drawingCanvas);
 
-            _previewLine.X2 = end.X;
-            _previewLine.Y2 = end.Y;
+            _previewLine.X2 = p.X;
+            _previewLine.Y2 = p.Y;
         }
 
+
+        // ==========================================
+        // FINISH WALL OR CALIBRATION LINE
+        // ==========================================
+
         private void MapCanvas_MouseLeftButtonUp(
-            object sender, MouseButtonEventArgs e)
+            object sender,
+            MouseButtonEventArgs e)
         {
             if (!_isDrawing ||
                 _drawingCanvas == null ||
@@ -695,7 +1618,8 @@ namespace WifiHeatMap1
             Line line = _previewLine;
 
             Point end = ClampToCanvas(
-                e.GetPosition(canvas), canvas);
+                e.GetPosition(canvas),
+                canvas);
 
             line.X2 = end.X;
             line.Y2 = end.Y;
@@ -705,28 +1629,30 @@ namespace WifiHeatMap1
             _previewLine = null;
 
             if (canvas.IsMouseCaptured)
+            {
                 canvas.ReleaseMouseCapture();
+            }
 
-            double distance = Math.Sqrt(
-                Math.Pow(end.X - _dragStart.X, 2) +
-                Math.Pow(end.Y - _dragStart.Y, 2));
+            double length =
+                (end - _dragStart).Length;
 
-            if (distance <= 5)
+            if (length <= 5)
             {
                 canvas.Children.Remove(line);
 
                 TxtStatus.Text =
-                    "Line too short. Click and drag farther.";
+                    "Line too short. Drag farther.";
 
                 return;
             }
 
-            // CALIBRATION REFERENCE LINE
+            // CALIBRATION
+
             if (_isCalibrating)
             {
                 _calibrationCanvas = canvas;
                 _calibrationLine = line;
-                _calibrationLineLength = distance;
+                _calibrationLineLength = length;
 
                 ModalScalePrompt.Visibility =
                     Visibility.Visible;
@@ -737,37 +1663,43 @@ namespace WifiHeatMap1
                 return;
             }
 
-            // WALL DRAWING ONLY IN PREDICTIVE WORKSPACE
-            if (!ReferenceEquals(canvas, PlanningCanvas) ||
+            // WALL DRAWING IS PREDICTIVE ONLY
+
+            if (!ReferenceEquals(
+                    canvas,
+                    PlanningCanvas) ||
                 RadioDrawWalls.IsChecked != true)
             {
                 canvas.Children.Remove(line);
                 return;
             }
 
-            WallMaterial material = GetWallMaterial();
+            WallMaterial material =
+                GetWallMaterial();
+
             double customLoss = 3.0;
 
             if (material == WallMaterial.Custom)
             {
                 string raw =
-                    TxtCustomDb.Text.Trim().Replace(',', '.');
+                    TxtCustomDb.Text.Trim()
+                        .Replace(',', '.');
 
                 if (!double.TryParse(
                         raw,
                         NumberStyles.Float,
                         CultureInfo.InvariantCulture,
                         out customLoss) ||
-                    double.IsNaN(customLoss) ||
-                    double.IsInfinity(customLoss) ||
-                    customLoss < 0)
+                    !double.IsFinite(customLoss) ||
+                    customLoss < 0 ||
+                    customLoss > 100)
                 {
                     canvas.Children.Remove(line);
 
                     MessageBox.Show(
-                        "Enter a valid non-negative wall " +
-                        "loss, e.g. 8.5 dB.",
-                        "Invalid Wall Attenuation",
+                        "Custom wall loss must be " +
+                        "between 0 and 100 dB.",
+                        "Invalid Wall Loss",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
 
@@ -775,29 +1707,69 @@ namespace WifiHeatMap1
                 }
             }
 
-            _walls.Add(new WallSegment
+            WallSegment wall = new()
             {
                 Start = _dragStart,
                 End = end,
                 Material = material,
-                CustomAttenuationDb = customLoss
-            });
 
+                CustomAttenuationDb =
+                    customLoss
+            };
+
+            _walls.Add(wall);
+
+            MarkDirty(true);
             UpdateCounters();
             RefreshCurrentOverlay(false);
 
             TxtStatus.Text =
-                $"Added {material} wall. " +
-                $"{_walls.Count} walls in this plan.";
+                $"Added {material} wall " +
+                $"({_walls.Count} walls total).";
         }
 
+
+        // ==========================================
+        // RESTORE SAVED WALL VISUAL
+        // ==========================================
+
+        private void AddWallVisual(WallSegment wall)
+        {
+            Line line = new()
+            {
+                X1 = wall.Start.X,
+                Y1 = wall.Start.Y,
+
+                X2 = wall.End.X,
+                Y2 = wall.End.Y,
+
+                Stroke = WallColor(wall.Material),
+                StrokeThickness = 4,
+
+                IsHitTestVisible = false
+            };
+
+            PlanningCanvas.Children.Add(line);
+        }
+
+
+        // ==========================================
+        // CLAMP MOUSE POSITION
+        // ==========================================
+
         private static Point ClampToCanvas(
-            Point p, Canvas canvas)
+            Point p,
+            Canvas canvas)
         {
             return new Point(
-                Math.Max(0, Math.Min(canvas.Width, p.X)),
-                Math.Max(0, Math.Min(canvas.Height, p.Y)));
+                Math.Clamp(p.X, 0, canvas.Width),
+                Math.Clamp(p.Y, 0, canvas.Height));
         }
+
+
+        // ==========================================
+        // CANCEL INCOMPLETE LINE
+        // ==========================================
 
         private void AbortDrawing()
         {
@@ -820,15 +1792,20 @@ namespace WifiHeatMap1
             _drawingCanvas = null;
         }
 
+
+        // ==========================================
+        // WALL MATERIAL AND COLOR
+        // ==========================================
+
         private WallMaterial GetWallMaterial()
         {
             if (CmbWallMaterial.SelectedItem
                     is ComboBoxItem item &&
                 Enum.TryParse(
                     item.Tag?.ToString(),
-                    out WallMaterial material))
+                    out WallMaterial result))
             {
-                return material;
+                return result;
             }
 
             return WallMaterial.Drywall;
@@ -836,28 +1813,43 @@ namespace WifiHeatMap1
 
         private Brush GetWallColor()
         {
-            return GetWallMaterial() switch
+            return WallColor(GetWallMaterial());
+        }
+
+        private static Brush WallColor(
+            WallMaterial material)
+        {
+            return material switch
             {
-                WallMaterial.Glass => Brushes.LightBlue,
-                WallMaterial.Brick => Brushes.Orange,
-                WallMaterial.Concrete => Brushes.Red,
-                WallMaterial.Custom => Brushes.MediumPurple,
+                WallMaterial.Glass =>
+                    Brushes.LightBlue,
+
+                WallMaterial.Brick =>
+                    Brushes.Orange,
+
+                WallMaterial.Concrete =>
+                    Brushes.Red,
+
+                WallMaterial.Custom =>
+                    Brushes.MediumPurple,
+
                 _ => Brushes.Gold
             };
         }
 
-        // =====================================================
-        // SHARED DISTANCE CALIBRATION
-        // =====================================================
+
+        // ==========================================
+        // START SHARED DISTANCE CALIBRATION
+        // ==========================================
 
         private void BtnCalibrate_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             if (!HasFloorPlan)
             {
                 MessageBox.Show(
-                    "Load a floor plan before calibrating " +
-                    "distance.",
+                    "Load a floor plan first.",
                     "No Floor Plan",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -871,7 +1863,7 @@ namespace WifiHeatMap1
 
                 TxtStatus.Text =
                     "Calibration canceled; " +
-                    "the previous scale remains.";
+                    "existing scale kept.";
 
                 return;
             }
@@ -879,35 +1871,41 @@ namespace WifiHeatMap1
             AbortDrawing();
 
             _isCalibrating = true;
-            BtnCalibrate.Content = "Cancel Calibration";
+
+            BtnCalibrate.Content =
+                "Cancel Calibration";
 
             TxtStatus.Text =
-                "Draw a line across a known " +
-                "real-world distance.";
+                "Drag along a known distance " +
+                "on the floor plan.";
 
             TxtMapHint.Text =
-                "CALIBRATION: Click and drag along " +
-                "a known distance.";
+                "CALIBRATION: Drag across a known length.";
         }
 
+
+        // ==========================================
+        // APPLY CALIBRATED SCALE
+        // ==========================================
+
         private void BtnApplyScale_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             string raw =
-                TxtMetersInput.Text.Trim().Replace(',', '.');
+                TxtMetersInput.Text.Trim()
+                    .Replace(',', '.');
 
             if (!double.TryParse(
                     raw,
                     NumberStyles.Float,
                     CultureInfo.InvariantCulture,
                     out double meters) ||
-                double.IsNaN(meters) ||
-                double.IsInfinity(meters) ||
+                !double.IsFinite(meters) ||
                 meters <= 0)
             {
                 MessageBox.Show(
-                    "Enter a positive distance in " +
-                    "meters (e.g. 2.5).",
+                    "Enter a positive distance in meters.",
                     "Invalid Distance",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -915,24 +1913,44 @@ namespace WifiHeatMap1
                 return;
             }
 
-            _mapUnitsPerMeter =
+            double scale =
                 _calibrationLineLength / meters;
 
-            TxtScaleDisplay.Text =
-                $"Scale: {_mapUnitsPerMeter:F1} " +
-                $"map units/m ({meters:g} m reference)";
+            if (!double.IsFinite(scale) ||
+                scale <= 0 ||
+                scale > 100000)
+            {
+                MessageBox.Show(
+                    "The resulting scale is invalid.",
+                    "Invalid Scale",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            _mapUnitsPerMeter = scale;
+            _scaleCalibrated = true;
 
             CancelCalibration();
+
+            UpdateScaleLabel();
+            MarkDirty(true);
             RefreshCurrentOverlay(false);
 
             TxtStatus.Text =
-                $"Scale updated to {_mapUnitsPerMeter:F1} " +
-                "units/m. Both workflows now use " +
-                "this calibration.";
+                $"Calibrated: {_mapUnitsPerMeter:F1} " +
+                "map units per meter.";
         }
 
+
+        // ==========================================
+        // CANCEL CALIBRATION
+        // ==========================================
+
         private void BtnCancelScale_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             CancelCalibration();
 
@@ -952,8 +1970,9 @@ namespace WifiHeatMap1
                     _calibrationLine);
             }
 
-            _calibrationLine = null;
             _calibrationCanvas = null;
+            _calibrationLine = null;
+
             _calibrationLineLength = 0;
             _isCalibrating = false;
 
@@ -970,12 +1989,16 @@ namespace WifiHeatMap1
             }
         }
 
-        // =====================================================
-        // RENDER ONLY THE ACTIVE WORKFLOW
-        // =====================================================
+
+        // ==========================================
+        // RENDER CURRENT WORKSPACE
+        // ==========================================
 
         private void RefreshCurrentOverlay(bool notify)
         {
+            if (ImgHeatMapOverlay == null)
+                return;
+
             ImgHeatMapOverlay.Source = null;
 
             if (!HasFloorPlan)
@@ -984,27 +2007,23 @@ namespace WifiHeatMap1
                 {
                     MessageBox.Show(
                         "Load a floor plan first.",
-                        "No Floor Plan",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                        "No Floor Plan");
                 }
 
                 return;
             }
 
-            // Keep rendering coordinates consistent
-            // with the WPF canvas, not image PixelWidth.
-            Canvas activeCanvas = IsSurveyActive
+            Canvas canvas = IsSurveyActive
                 ? SurveyCanvas
                 : PlanningCanvas;
 
             int width = Math.Max(
                 1,
-                (int)Math.Ceiling(activeCanvas.Width));
+                (int)Math.Ceiling(canvas.Width));
 
             int height = Math.Max(
                 1,
-                (int)Math.Ceiling(activeCanvas.Height));
+                (int)Math.Ceiling(canvas.Height));
 
             try
             {
@@ -1015,8 +2034,8 @@ namespace WifiHeatMap1
                         if (notify)
                         {
                             MessageBox.Show(
-                                "Take at least 3 measurements " +
-                                "in different places first.",
+                                "Collect at least three measurements " +
+                                "in different locations.",
                                 "More Measurements Needed",
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
@@ -1031,10 +2050,6 @@ namespace WifiHeatMap1
                             height,
                             _samples,
                             _mapUnitsPerMeter);
-
-                    TxtStatus.Text =
-                        $"IDW heat map shown " +
-                        $"({_samples.Count} measurements).";
                 }
                 else
                 {
@@ -1043,9 +2058,7 @@ namespace WifiHeatMap1
                         if (notify)
                         {
                             MessageBox.Show(
-                                "Choose Place / move virtual " +
-                                "router and click the floor " +
-                                "plan first.",
+                                "Place a virtual router first.",
                                 "Router Needed",
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
@@ -1061,10 +2074,6 @@ namespace WifiHeatMap1
                             _routerPosition.Value,
                             _walls,
                             _mapUnitsPerMeter);
-
-                    TxtStatus.Text =
-                        $"Prediction shown with " +
-                        $"{_walls.Count} walls.";
                 }
             }
             catch (Exception ex)
@@ -1084,109 +2093,32 @@ namespace WifiHeatMap1
             }
         }
 
-        // =====================================================
-        // VISUAL MARKERS
-        // =====================================================
 
-        private static Grid CreateSurveyMarker(
-            int number, double rssi)
-        {
-            Grid marker = new()
-            {
-                Width = 24,
-                Height = 24,
-                IsHitTestVisible = true
-            };
-
-            marker.Children.Add(new Ellipse
-            {
-                Fill = Brushes.DeepSkyBlue,
-                Stroke = Brushes.White,
-                StrokeThickness = 2
-            });
-
-            marker.Children.Add(new TextBlock
-            {
-                Text = number.ToString(),
-                Foreground = Brushes.Black,
-                FontSize = 11,
-                FontWeight = FontWeights.Bold,
-
-                HorizontalAlignment =
-                    HorizontalAlignment.Center,
-
-                VerticalAlignment =
-                    VerticalAlignment.Center
-            });
-
-            marker.ToolTip =
-                $"Sample {number}: {rssi} dBm";
-
-            // Show tooltips without recording an
-            // extra sample when clicking an old marker.
-            marker.PreviewMouseLeftButtonDown +=
-                (s, args) => args.Handled = true;
-
-            return marker;
-        }
-
-        private static Grid CreateRouterMarker()
-        {
-            Grid marker = new()
-            {
-                Width = 36,
-                Height = 36,
-                IsHitTestVisible = true
-            };
-
-            marker.Children.Add(new Ellipse
-            {
-                Fill = Brushes.DarkRed,
-                Stroke = Brushes.White,
-                StrokeThickness = 2.5
-            });
-
-            marker.Children.Add(new TextBlock
-            {
-                Text = "AP",
-                Foreground = Brushes.White,
-                FontSize = 12,
-                FontWeight = FontWeights.Bold,
-
-                HorizontalAlignment =
-                    HorizontalAlignment.Center,
-
-                VerticalAlignment =
-                    VerticalAlignment.Center
-            });
-
-            marker.ToolTip = "Virtual Wi-Fi router";
-
-            marker.PreviewMouseLeftButtonDown +=
-                (s, args) => args.Handled = true;
-
-            return marker;
-        }
+        // ==========================================
+        // UPDATE WORKSPACE COUNTERS
+        // ==========================================
 
         private void UpdateCounters()
         {
-            TxtSurveyCount.Text = _samples.Count == 1
-                ? "1 measurement (3 needed for IDW)"
-                : $"{_samples.Count} measurements" +
-                  (_samples.Count < 3
-                      ? " (3 needed for IDW)"
-                      : " (IDW ready)");
+            TxtSurveyCount.Text =
+                $"{_samples.Count} measurements"
+                +
+                (_samples.Count < 3
+                    ? " (3 needed for IDW)"
+                    : " (IDW ready)");
 
             TxtPlanningCount.Text =
-                $"{_walls.Count} walls  |  " +
+                $"{_walls.Count} walls | "
+                +
                 (_routerPosition.HasValue
                     ? "Router placed"
                     : "No virtual router");
         }
 
-        // =====================================================
-        // RESET + LOGOUT
-        // =====================================================
+
+        // ==========================================
+        // RESET BOTH WORKSPACES
+        // ==========================================
 
         private void ResetBothWorkflows()
         {
@@ -1195,6 +2127,7 @@ namespace WifiHeatMap1
 
             _samples.Clear();
             _surveyBssid = null;
+            _surveySsid = null;
 
             _walls.Clear();
             _routerPosition = null;
@@ -1203,17 +2136,35 @@ namespace WifiHeatMap1
             SurveyCanvas.Children.Clear();
             PlanningCanvas.Children.Clear();
 
+            CmbSelectedNetwork.Items.Clear();
+
             ImgHeatMapOverlay.Source = null;
+
+            _planningRevision++;
+
+            ClearSuggestion();
 
             UpdateCounters();
         }
 
+
+        // ==========================================
+        // LOGOUT
+        // ==========================================
+
         private void BtnLogout_Click(
-            object sender, RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
+            if (!ConfirmDiscard())
+                return;
+
+            _allowClose = true;
+
             SessionService.ClearSession();
 
             MainWindow login = new();
+
             login.Show();
 
             Close();

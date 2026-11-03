@@ -1,5 +1,7 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -7,137 +9,284 @@ namespace WifiHeatMap1
 {
     public static class HeatMapRenderer
     {
-        // 1. Empirical Mode: IDW Interpolation with Distance Falloff & Calibrated Scale
-        public static WriteableBitmap RenderIdwHeatMap(int width, int height, List<SamplePoint> samples, double pixelsPerMeter = 35.0, int step = 4)
-        {
-            WriteableBitmap bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-            if (samples.Count == 0) return bitmap;
+        // ==========================================
+        // MEASURED COVERAGE: IDW
+        // ==========================================
 
-            byte[] pixelData = new byte[width * height * 4];
-            double maxSamplingRadius = pixelsPerMeter * 12.0; // Max radius of ~12 meters
+        public static WriteableBitmap RenderIdwHeatMap(
+            int width,
+            int height,
+            List<SamplePoint> samples,
+            double pixelsPerMeter = 35.0,
+            int step = 4)
+        {
+            if (width <= 0 || height <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width));
+
+            WriteableBitmap bitmap = new(
+                width,
+                height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null);
+
+            if (samples.Count == 0)
+                return bitmap;
+
+            step = Math.Max(1, step);
+
+            byte[] pixels = new byte[
+                checked(width * height * 4)];
+
+            double radius = pixelsPerMeter * 12.0;
 
             for (int y = 0; y < height; y += step)
             {
                 for (int x = 0; x < width; x += step)
                 {
-                    double totalWeight = 0;
-                    double weightedRssiSum = 0;
-                    double minDistance = double.MaxValue;
+                    double weightTotal = 0;
+                    double rssiTotal = 0;
+                    double nearestDistance = double.MaxValue;
 
-                    foreach (var sample in samples)
+                    foreach (SamplePoint sample in samples)
                     {
-                        double dist = Math.Sqrt(Math.Pow(x - sample.Position.X, 2) + Math.Pow(y - sample.Position.Y, 2));
-                        if (dist < minDistance) minDistance = dist;
+                        double distance = Math.Sqrt(
+                            Math.Pow(
+                                x - sample.Position.X, 2)
+                            +
+                            Math.Pow(
+                                y - sample.Position.Y, 2));
 
-                        double d = Math.Max(1.0, dist);
-                        double weight = 1.0 / (d * d);
+                        nearestDistance = Math.Min(
+                            nearestDistance, distance);
 
-                        totalWeight += weight;
-                        weightedRssiSum += weight * sample.Rssi;
+                        double weight =
+                            1.0 /
+                            Math.Pow(
+                                Math.Max(1.0, distance), 2);
+
+                        weightTotal += weight;
+                        rssiTotal += weight * sample.Rssi;
                     }
 
-                    if (minDistance > maxSamplingRadius) continue;
+                    if (nearestDistance > radius)
+                        continue;
 
-                    double baseRssi = weightedRssiSum / totalWeight;
-                    double distanceMeters = minDistance / pixelsPerMeter;
-                    double finalRssi = baseRssi - (distanceMeters * 3.0);
+                    double estimate =
+                        rssiTotal / weightTotal -
+                        3.0 * (
+                            nearestDistance / pixelsPerMeter);
 
-                    Color c = RssiToColor(finalRssi);
-
-                    for (int dy = 0; dy < step && (y + dy) < height; dy++)
-                    {
-                        for (int dx = 0; dx < step && (x + dx) < width; dx++)
-                        {
-                            int index = ((y + dy) * width + (x + dx)) * 4;
-                            pixelData[index] = c.B;
-                            pixelData[index + 1] = c.G;
-                            pixelData[index + 2] = c.R;
-                            pixelData[index + 3] = c.A;
-                        }
-                    }
+                    PaintBlock(
+                        pixels,
+                        width,
+                        height,
+                        x,
+                        y,
+                        step,
+                        RssiToColor(estimate));
                 }
             }
 
-            bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixelData, width * 4, 0);
+            bitmap.WritePixels(
+                new Int32Rect(0, 0, width, height),
+                pixels,
+                width * 4,
+                0);
+
             return bitmap;
         }
 
-        // 2. Predictive Mode: Virtual AP + Calibrated Wall Raycasting
-        public static WriteableBitmap RenderPredictiveHeatMap(int width, int height, System.Windows.Point apPos, List<WallSegment> walls, double pixelsPerMeter = 35.0, double txPowerDbms = 20, int step = 4)
+        // ==========================================
+        // SHARED PREDICTIVE RSSI MODEL
+        // ==========================================
+
+        public static double PredictRssi(
+            Point router,
+            Point receiver,
+            IReadOnlyList<WallSegment> walls,
+            double pixelsPerMeter,
+            double txPowerDbm = 20)
         {
-            WriteableBitmap bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-            byte[] pixelData = new byte[width * height * 4];
+            if (pixelsPerMeter <= 0 ||
+                !double.IsFinite(pixelsPerMeter))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(pixelsPerMeter));
+            }
+
+            double distanceMapUnits =
+                (receiver - router).Length;
+
+            double distanceMeters = Math.Max(
+                0.5,
+                distanceMapUnits / pixelsPerMeter);
+
+            double pathLoss =
+                20.0 * Math.Log10(distanceMeters) + 40.0;
+
+            double wallLoss = 0.0;
+
+            foreach (WallSegment wall in walls)
+            {
+                if (wall.IntersectsLine(router, receiver))
+                {
+                    wallLoss += wall.AttenuationDb;
+                }
+            }
+
+            return txPowerDbm - pathLoss - wallLoss;
+        }
+
+        // ==========================================
+        // PREDICTIVE HEAT MAP
+        // ==========================================
+
+        public static WriteableBitmap RenderPredictiveHeatMap(
+            int width,
+            int height,
+            Point router,
+            List<WallSegment> walls,
+            double pixelsPerMeter = 35.0,
+            double txPowerDbms = 20,
+            int step = 4)
+        {
+            if (width <= 0 || height <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width));
+
+            WriteableBitmap bitmap = new(
+                width,
+                height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null);
+
+            byte[] pixels = new byte[
+                checked(width * height * 4)];
+
+            step = Math.Max(1, step);
 
             for (int y = 0; y < height; y += step)
             {
                 for (int x = 0; x < width; x += step)
                 {
-                    System.Windows.Point currentPx = new System.Windows.Point(x, y);
-                    double distPixels = Math.Sqrt(Math.Pow(x - apPos.X, 2) + Math.Pow(y - apPos.Y, 2));
-                    double distMeters = Math.Max(0.5, distPixels / pixelsPerMeter);
+                    double rssi = PredictRssi(
+                        router,
+                        new Point(x, y),
+                        walls,
+                        pixelsPerMeter,
+                        txPowerDbms);
 
-                    double pathLoss = 20 * Math.Log10(distMeters) + 40;
-
-                    double wallLoss = 0;
-                    foreach (var wall in walls)
-                    {
-                        if (wall.IntersectsLine(apPos, currentPx))
-                        {
-                            wallLoss += wall.AttenuationDb;
-                        }
-                    }
-
-                    double calculatedRssi = txPowerDbms - pathLoss - wallLoss;
-                    Color c = RssiToColor(calculatedRssi);
-
-                    for (int dy = 0; dy < step && (y + dy) < height; dy++)
-                    {
-                        for (int dx = 0; dx < step && (x + dx) < width; dx++)
-                        {
-                            int index = ((y + dy) * width + (x + dx)) * 4;
-                            pixelData[index] = c.B;
-                            pixelData[index + 1] = c.G;
-                            pixelData[index + 2] = c.R;
-                            pixelData[index + 3] = c.A;
-                        }
-                    }
+                    PaintBlock(
+                        pixels,
+                        width,
+                        height,
+                        x,
+                        y,
+                        step,
+                        RssiToColor(rssi));
                 }
             }
 
-            bitmap.WritePixels(new System.Windows.Int32Rect(0, 0, width, height), pixelData, width * 4, 0);
+            bitmap.WritePixels(
+                new Int32Rect(0, 0, width, height),
+                pixels,
+                width * 4,
+                0);
+
             return bitmap;
         }
 
-        // 3. Thermal Color Gradient
+        // ==========================================
+        // WRITE COLORED PIXELS
+        // ==========================================
+
+        private static void PaintBlock(
+            byte[] pixels,
+            int width,
+            int height,
+            int x,
+            int y,
+            int step,
+            Color color)
+        {
+            for (int dy = 0;
+                 dy < step && y + dy < height;
+                 dy++)
+            {
+                for (int dx = 0;
+                     dx < step && x + dx < width;
+                     dx++)
+                {
+                    int index =
+                        ((y + dy) * width + x + dx) * 4;
+
+                    pixels[index] = color.B;
+                    pixels[index + 1] = color.G;
+                    pixels[index + 2] = color.R;
+                    pixels[index + 3] = color.A;
+                }
+            }
+        }
+
+        // ==========================================
+        // RSSI COLOR GRADIENT
+        // ==========================================
+
         public static Color RssiToColor(double rssi)
         {
-            if (rssi < -88.0) return Colors.Transparent;
+            if (rssi < -88)
+                return Colors.Transparent;
 
-            double norm = (rssi - (-88.0)) / (-30.0 - (-88.0));
-            norm = Math.Max(0.0, Math.Min(1.0, norm));
+            double norm = Math.Clamp(
+                (rssi + 88.0) / 58.0,
+                0.0,
+                1.0);
 
-            byte alpha = 160;
+            const byte alpha = 160;
 
             if (norm > 0.75)
             {
                 double t = (norm - 0.75) / 0.25;
-                return Color.FromArgb(alpha, 255, (byte)(255 * (1 - t)), 0);
+
+                return Color.FromArgb(
+                    alpha,
+                    255,
+                    (byte)(255 * (1 - t)),
+                    0);
             }
-            else if (norm > 0.50)
+
+            if (norm > 0.50)
             {
                 double t = (norm - 0.50) / 0.25;
-                return Color.FromArgb(alpha, (byte)(255 * t), 255, 0);
+
+                return Color.FromArgb(
+                    alpha,
+                    (byte)(255 * t),
+                    255,
+                    0);
             }
-            else if (norm > 0.25)
+
+            if (norm > 0.25)
             {
                 double t = (norm - 0.25) / 0.25;
-                return Color.FromArgb(alpha, 0, 255, (byte)(255 * (1 - t)));
+
+                return Color.FromArgb(
+                    alpha,
+                    0,
+                    255,
+                    (byte)(255 * (1 - t)));
             }
-            else
-            {
-                double t = norm / 0.25;
-                return Color.FromArgb(alpha, 0, (byte)(255 * t), 255);
-            }
+
+            double a = norm / 0.25;
+
+            return Color.FromArgb(
+                alpha,
+                0,
+                (byte)(255 * a),
+                255);
         }
     }
 }
